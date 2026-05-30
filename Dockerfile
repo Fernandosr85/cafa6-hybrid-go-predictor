@@ -1,43 +1,40 @@
 # ──────────────────────────────────────────────────────────────
-# CAFA-6 Hybrid Predictor — LAFA Container
-# MMseqs2 + k-mer Jaccard + Reranker (IA-weighted)
-# Author: Fernando Rodrigues
-# License: MIT
+# CAFA-6 Hybrid Predictor + GO Closure — LAFA Container
+# MMseqs2 + k-mer Jaccard + IA-weighted Reranker + GO Propagation
+# Author: Fernando Rodrigues | License: MIT
 # ──────────────────────────────────────────────────────────────
 FROM python:3.10-slim
 
-# System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget \
-    curl \
-    ca-certificates \
-    build-essential \
+    wget curl ca-certificates build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Create app directory
 WORKDIR /app
 
-# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy pipeline source
 COPY predict.py .
 
-# ── Default paths used by LAFA ──────────────────────────────
-# LAFA will mount data via --fasta / --train_fasta / etc.
-# Output is written to /output/predictions.tsv by default.
+# Pre-download go-basic.obo so container works offline
+RUN python -c "\
+import urllib.request, os; \
+url='http://purl.obolibrary.org/obo/go/go-basic.obo'; \
+urllib.request.urlretrieve(url, '/tmp/go-basic.obo'); \
+print('go-basic.obo downloaded:', os.path.getsize('/tmp/go-basic.obo'), 'bytes')"
 
 RUN mkdir -p /data /output
 
-# Entrypoint: LAFA calls this with --fasta and expects output TSV
-ENTRYPOINT ["python", "/app/predict.py"]
+ENTRYPOINT ["python", "/app/predict.py", "--obo", "/tmp/go-basic.obo"]
 
-# Default CMD (can be overridden by LAFA)
-# LAFA typically provides:
-#   --fasta /data/test.fasta
-#   --train_fasta /data/train.fasta
-#   --train_terms /data/train_terms.tsv
-#   --ia /data/ia.tsv
-#   --output /output/predictions.tsv
+# LAFA call example:
+# docker run --rm \
+#   -v /path/to/data:/data \
+#   -v /path/to/output:/output \
+#   cafa6-hybrid \
+#     --fasta       /data/test.fasta \
+#     --train_fasta /data/train.fasta \
+#     --train_terms /data/train_terms.tsv \
+#     --ia          /data/ia.tsv \
+#     --output      /output/predictions.tsv
 CMD ["--help"]
